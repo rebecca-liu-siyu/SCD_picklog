@@ -9,54 +9,40 @@ export default function FeedPage() {
   const router = useRouter()
   const [posts, setPosts] = useState<any[]>([])
   const [index, setIndex] = useState(0)
-  const [identity, setIdentity] = useState<any>(null)
 
   useEffect(() => {
-    loadIdentity()
+    loadPosts()
   }, [])
 
-  async function loadIdentity() {
+  async function loadPosts() {
 
-    const localUserId = localStorage.getItem('local_user_id')
-    if (!localUserId) return
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('*')
-      .eq('local_user_id', localUserId)
-      .single()
-
-    const today = new Date().toISOString().split('T')[0]
-
-    const { data } = await supabase
-      .from('daily_identity')
+    // 🔥 先拿全部 posts（先確保有資料）
+    const { data, error } = await supabase
+      .from('posts')
       .select(`
         *,
-        profiles (*)
+        profiles (
+          display_name,
+          avatar_url,
+          profile_type
+        )
       `)
-      .eq('user_id', user.id)
-      .eq('assigned_date', today)
-      .single()
+      .order('created_at', { ascending: false })
 
-    setIdentity(data)
-    loadPosts(data?.profiles)
-  }
-
-  async function loadPosts(profile: any) {
-
-    if (!profile) return
-
-    let query = supabase
-      .from('posts')
-      .select(`*, profiles(*)`)
-
-    if (profile.profile_type !== 'ANON') {
-      query = query.eq('profile_id', profile.id)
+    if (error) {
+      console.log('posts error:', error)
+      return
     }
 
-    const { data } = await query
+    if (!data) {
+      setPosts([])
+      return
+    }
 
-    setPosts(data || [])
+    // shuffle
+    const shuffled = [...data].sort(() => Math.random() - 0.5)
+
+    setPosts(shuffled)
     setIndex(0)
   }
 
@@ -69,33 +55,28 @@ export default function FeedPage() {
   return (
     <div className="max-w-md mx-auto h-screen flex flex-col">
 
-      {/* header */}
-      <div className="p-3 border-b">
-        <p className="text-xs text-gray-500">Today Identity</p>
-        <p className="font-bold">
-          {identity?.profiles?.display_name}
-        </p>
-      </div>
+      {/* BODY */}
+      <div className="flex-1 relative p-4">
 
-      {/* body */}
-      <div className="flex-1 relative">
-
-        {post && (
-          <div className="p-4 space-y-3">
-
+        {post ? (
+          <>
             <p className="font-semibold">
               {post.profiles?.display_name}
             </p>
 
             {post.image_url && (
-              <img src={post.image_url} className="w-full rounded-xl" />
+              <img
+                src={post.image_url}
+                className="w-full mt-2 rounded-xl"
+              />
             )}
 
-            <p className="text-sm whitespace-pre-wrap">
+            <p className="mt-2 whitespace-pre-wrap">
               {post.content}
             </p>
-
-          </div>
+          </>
+        ) : (
+          <p>No posts</p>
         )}
 
         <div
@@ -104,7 +85,7 @@ export default function FeedPage() {
         />
       </div>
 
-      {/* footer */}
+      {/* FOOT */}
       <div className="border-t flex justify-around p-3">
         <button onClick={() => router.push('/feed')}>Home</button>
         <button onClick={() => router.push('/post')}>＋</button>
