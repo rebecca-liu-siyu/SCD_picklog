@@ -1,102 +1,64 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 
 export default function OnboardingPage() {
 
   const router = useRouter()
 
   // ================= REAL =================
-  const [realName, setRealName] = useState('')
+  const [realId, setRealId] = useState('')
   const [realBio, setRealBio] = useState('')
-  const [realAvatar, setRealAvatar] = useState('')
+  const [realAvatar, setRealAvatar] =
+    useState<File | null>(null)
 
   // ================= PSEUDO =================
-  const [pseudoName, setPseudoName] = useState('')
+  const [pseudoId, setPseudoId] = useState('')
   const [pseudoBio, setPseudoBio] = useState('')
-  const [pseudoAvatar, setPseudoAvatar] = useState('')
+  const [pseudoAvatar, setPseudoAvatar] =
+    useState<File | null>(null)
 
   const [loading, setLoading] = useState(false)
 
-  // ================= INIT =================
-  useEffect(() => {
-    checkExistingUser()
-  }, [])
+  // ================= UPLOAD AVATAR =================
+  async function uploadAvatar(file: File, type: 'REAL' | 'PSEUDO') {
+    const ext = file.name.split('.').pop()
 
-  async function checkExistingUser() {
-
-    const localUserId = localStorage.getItem(
-      'local_user_id'
-    )
-
-    if (!localUserId) return
-
-    const { data: userData } = await supabase
-      .from('users')
-      .select('*')
-      .eq('local_user_id', localUserId)
-      .single()
-
-    if (!userData) {
-
-      localStorage.removeItem('local_user_id')
-      localStorage.removeItem('force_profile_type')
-
-      return
-    }
-
-    router.push('/feed')
-  }
-
-  // ================= UPLOAD =================
-  async function uploadAvatar(
-    file: File,
-    type: 'REAL' | 'PSEUDO'
-  ) {
-
-    const fileExt = file.name.split('.').pop()
-
-    const fileName = `${crypto.randomUUID()}.${fileExt}`
+    const fileName = `${Date.now()}-${Math.random()}.${ext}`
 
     const filePath = `${type}/${fileName}`
 
-    const { error } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file)
+    const { error } = await supabase
+        .storage
+        .from('avatars')
+        .upload(filePath, file)
 
     if (error) {
-      console.error(error)
-      alert('圖片上傳失敗')
-      return null
+        console.log(error)
+        return ''
     }
 
-    const {
-      data: { publicUrl }
-    } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(filePath)
+    const { data } = supabase
+        .storage
+        .from('avatars')
+        .getPublicUrl(filePath)
 
-    return publicUrl
-  }
+    return data.publicUrl
+    }
 
   // ================= SUBMIT =================
   async function handleSubmit() {
 
-    if (!realName || !pseudoName) {
-      alert('請填寫名字')
-      return
-    }
-
-    setLoading(true)
-
     try {
 
-      const localUserId = crypto.randomUUID()
+      setLoading(true)
 
       // ================= CREATE USER =================
-      const { data: user, error: userError } =
+      const localUserId = crypto.randomUUID()
+
+      const { data: userData, error: userError } =
         await supabase
           .from('users')
           .insert({
@@ -105,216 +67,374 @@ export default function OnboardingPage() {
           .select()
           .single()
 
-      if (userError || !user) {
-        console.error(userError)
-        alert('建立 user 失敗')
-        setLoading(false)
+      if (userError || !userData) {
+        console.log(userError)
+        alert('Create user failed')
         return
       }
 
-      // ================= REAL PROFILE =================
-      await supabase
-        .from('profiles')
-        .insert({
-          user_id: user.id,
-          profile_type: 'REAL',
-          display_name: realName,
-          bio: realBio,
-          avatar_url: realAvatar
-        })
-
-      // ================= PSEUDO PROFILE =================
-      await supabase
-        .from('profiles')
-        .insert({
-          user_id: user.id,
-          profile_type: 'PSEUDO',
-          display_name: pseudoName,
-          bio: pseudoBio,
-          avatar_url: pseudoAvatar
-        })
-
-      // ================= ANON PROFILE =================
-      await supabase
-        .from('profiles')
-        .insert({
-          user_id: user.id,
-          profile_type: 'ANON',
-          display_name: '匿名'
-        })
-
-      // ================= SAVE =================
+      // save local identity
       localStorage.setItem(
         'local_user_id',
         localUserId
       )
 
-      localStorage.removeItem(
-        'force_profile_type'
-      )
+      // ================= UPLOAD REAL AVATAR =================
+      let realAvatarUrl = ''
+
+      if (realAvatar) {
+        realAvatarUrl =
+          await uploadAvatar(realAvatar, "REAL")
+      }
+
+      // ================= UPLOAD PSEUDO AVATAR =================
+      let pseudoAvatarUrl = ''
+
+      if (pseudoAvatar) {
+        pseudoAvatarUrl =
+          await uploadAvatar(pseudoAvatar, "PSEUDO")
+      }
+
+      // ================= CREATE REAL PROFILE =================
+      const { data: realProfile } =
+        await supabase
+          .from('profiles')
+          .insert({
+            user_id: userData.id,
+            display_name: realId,
+            bio: realBio,
+            avatar_url: realAvatarUrl,
+            profile_type: 'REAL'
+          })
+          .select()
+          .single()
+
+      // ================= CREATE PSEUDO PROFILE =================
+      const { data: pseudoProfile } =
+        await supabase
+          .from('profiles')
+          .insert({
+            user_id: userData.id,
+            display_name: pseudoId,
+            bio: pseudoBio,
+            avatar_url: pseudoAvatarUrl,
+            profile_type: 'PSEUDO'
+          })
+          .select()
+          .single()
+
+      // ================= CREATE ANON PROFILE =================
+      const { data: anonProfile } =
+        await supabase
+          .from('profiles')
+          .insert({
+            user_id: userData.id,
+            display_name: 'Anonymous',
+            profile_type: 'ANON'
+          })
+          .select()
+          .single()
+
+      // ================= ASSIGN DAILY IDENTITY =================
+      const profiles = [
+        realProfile,
+        pseudoProfile,
+        anonProfile
+      ].filter(Boolean)
+
+      const randomProfile =
+        profiles[
+          Math.floor(
+            Math.random() * profiles.length
+          )
+        ]
+
+      const today = new Date()
+        .toISOString()
+        .split('T')[0]
+
+      await supabase
+        .from('daily_identity')
+        .insert({
+          user_id: userData.id,
+          profile_id: randomProfile.id,
+          assigned_date: today
+        })
 
       router.push('/feed')
 
-    } catch (err) {
+    } finally {
 
-      console.error(err)
-      alert('發生錯誤')
+      setLoading(false)
 
     }
-
-    setLoading(false)
   }
 
   return (
+    <div className="h-screen bg-white flex justify-center overflow-hidden">
 
-    <div className="min-h-screen bg-gray-100 flex justify-center">
+      {/* APP */}
+      <div className="w-full max-w-md h-screen flex flex-col bg-white">
 
-      <div className="w-full max-w-md bg-white min-h-screen p-4 space-y-6">
+        {/* ================= HEAD ================= */}
+        <div className="shrink-0 border-b px-4 py-3 bg-white">
 
-        {/* TITLE */}
-        <div>
-          <h1 className="text-2xl font-bold">
-            Create Your Accounts
-          </h1>
-
-          <p className="text-sm text-gray-500">
-            設定你的大帳與小帳
+          <p className="text-xl font-bold">
+            Welcome
           </p>
-        </div>
 
-        {/* ================= REAL ================= */}
-        <div className="space-y-3 border rounded-2xl p-4">
-
-          <h2 className="font-bold">
-            大帳（REAL）
-          </h2>
-
-          <input
-            value={realName}
-            onChange={(e) =>
-              setRealName(e.target.value)
-            }
-            placeholder="名字"
-            className="w-full border rounded-xl p-3"
-          />
-
-          <input
-            value={realBio}
-            onChange={(e) =>
-              setRealBio(e.target.value)
-            }
-            placeholder="個人簡介"
-            className="w-full border rounded-xl p-3"
-          />
-
-          {/* REAL AVATAR */}
-          <input
-            type="file"
-            accept="image/*"
-            onChange={async (e) => {
-
-              const file = e.target.files?.[0]
-
-              if (!file) return
-
-              const url = await uploadAvatar(
-                file,
-                'REAL'
-              )
-
-              if (url) {
-                setRealAvatar(url)
-              }
-            }}
-          />
-
-          {realAvatar && (
-            <img
-              src={realAvatar}
-              className="w-20 h-20 rounded-full object-cover"
-            />
-          )}
-
-        </div>
-
-        {/* ================= PSEUDO ================= */}
-        <div className="space-y-3 border rounded-2xl p-4">
-
-          <h2 className="font-bold">
-            小帳（PSEUDO）
-          </h2>
-
-          <input
-            value={pseudoName}
-            onChange={(e) =>
-              setPseudoName(e.target.value)
-            }
-            placeholder="匿名 ID"
-            className="w-full border rounded-xl p-3"
-          />
-
-          <input
-            value={pseudoBio}
-            onChange={(e) =>
-              setPseudoBio(e.target.value)
-            }
-            placeholder="個人簡介"
-            className="w-full border rounded-xl p-3"
-          />
-
-          {/* PSEUDO AVATAR */}
-          <input
-            type="file"
-            accept="image/*"
-            onChange={async (e) => {
-
-              const file = e.target.files?.[0]
-
-              if (!file) return
-
-              const url = await uploadAvatar(
-                file,
-                'PSEUDO'
-              )
-
-              if (url) {
-                setPseudoAvatar(url)
-              }
-            }}
-          />
-
-          {pseudoAvatar && (
-            <img
-              src={pseudoAvatar}
-              className="w-20 h-20 rounded-full object-cover"
-            />
-          )}
-
-        </div>
-
-        {/* ================= ANON ================= */}
-        <div className="border rounded-2xl p-4 bg-gray-50">
-
-          <h2 className="font-bold mb-1">
-            匿名帳號（ANON）
-          </h2>
-
-          <p className="text-sm text-gray-500">
-            系統將自動建立匿名身份。
+          <p className="text-sm text-gray-500 mt-1">
+            Create your identities
           </p>
 
         </div>
 
-        {/* ================= SUBMIT ================= */}
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="w-full bg-black text-white rounded-2xl p-4 font-bold"
+        {/* ================= BODY ================= */}
+        <div
+          className="
+            flex-1
+            overflow-y-auto
+            scrollbar-hide
+            p-4
+            space-y-8
+          "
         >
-          {loading
-            ? 'Creating...'
-            : '開始使用'}
-        </button>
+
+          {/* ================= REAL ================= */}
+          <div className="space-y-4">
+
+            <div>
+
+              <p className="font-semibold">
+                REAL
+              </p>
+
+              <p className="text-sm text-gray-500">
+                Your main identity
+              </p>
+
+            </div>
+
+            {/* avatar */}
+            <div>
+
+              <label
+                className="
+                  block
+                  border
+                  rounded-2xl
+                  p-4
+                  text-center
+                  text-sm
+                "
+              >
+
+                Upload Avatar
+
+                <input
+                  hidden
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+
+                    const file =
+                      e.target.files?.[0]
+
+                    if (file) {
+                      setRealAvatar(file)
+                    }
+
+                  }}
+                />
+
+              </label>
+
+            </div>
+
+            {/* preview */}
+            {realAvatar && (
+
+              <img
+                src={URL.createObjectURL(realAvatar)}
+                className="
+                  w-24
+                  h-24
+                  rounded-full
+                  object-cover
+                "
+              />
+
+            )}
+
+            {/* id */}
+            <input
+              value={realId}
+              onChange={(e) =>
+                setRealId(e.target.value)
+              }
+              placeholder="ID"
+              className="
+                w-full
+                border-b
+                py-3
+                outline-none
+              "
+            />
+
+            {/* bio */}
+            <textarea
+              value={realBio}
+              onChange={(e) =>
+                setRealBio(e.target.value)
+              }
+              placeholder="Bio"
+              className="
+                w-full
+                min-h-[100px]
+                border-b
+                py-3
+                outline-none
+                resize-none
+              "
+            />
+
+          </div>
+
+          {/* ================= PSEUDO ================= */}
+          <div className="space-y-4">
+
+            <div>
+
+              <p className="font-semibold">
+                PSEUDO
+              </p>
+
+              <p className="text-sm text-gray-500">
+                Your alternate identity
+              </p>
+
+            </div>
+
+            {/* avatar */}
+            <div>
+
+              <label
+                className="
+                  block
+                  border
+                  rounded-2xl
+                  p-4
+                  text-center
+                  text-sm
+                "
+              >
+
+                Upload Avatar
+
+                <input
+                  hidden
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+
+                    const file =
+                      e.target.files?.[0]
+
+                    if (file) {
+                      setPseudoAvatar(file)
+                    }
+
+                  }}
+                />
+
+              </label>
+
+            </div>
+
+            {/* preview */}
+            {pseudoAvatar && (
+
+              <img
+                src={URL.createObjectURL(
+                  pseudoAvatar
+                )}
+                className="
+                  w-24
+                  h-24
+                  rounded-full
+                  object-cover
+                "
+              />
+
+            )}
+
+            {/* id */}
+            <input
+              value={pseudoId}
+              onChange={(e) =>
+                setPseudoId(e.target.value)
+              }
+              placeholder="ID"
+              className="
+                w-full
+                border-b
+                py-3
+                outline-none
+              "
+            />
+
+            {/* bio */}
+            <textarea
+              value={pseudoBio}
+              onChange={(e) =>
+                setPseudoBio(e.target.value)
+              }
+              placeholder="Bio"
+              className="
+                w-full
+                min-h-[100px]
+                border-b
+                py-3
+                outline-none
+                resize-none
+              "
+            />
+
+          </div>
+
+        </div>
+
+        {/* ================= FOOT ================= */}
+        <div
+          className="
+            shrink-0
+            border-t
+            bg-white
+            p-3
+          "
+        >
+
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="
+              w-full
+              bg-black
+              text-white
+              rounded-full
+              py-3
+              font-semibold
+              disabled:opacity-50
+            "
+          >
+
+            {loading
+              ? 'Creating...'
+              : 'Enter'}
+
+          </button>
+
+        </div>
 
       </div>
 
