@@ -177,7 +177,21 @@ export default function OnboardingPage() {
       <div className="w-full max-w-md h-screen flex flex-col bg-white">
 
         {/* ================= HEAD ================= */}
-        <div className="shrink-0 border-b px-4 py-3 bg-white">
+        <div className="shrink-0 border-b px-4 py-3 bg-white relative">
+
+          <button
+            onClick={() => router.push('/login')}
+            className="
+              absolute
+              right-4
+              top-3
+              text-sm
+              font-semibold
+              text-blue-500
+            "
+          >
+            Login
+          </button>
 
           <p className="text-xl font-bold">
             Welcome
