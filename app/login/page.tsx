@@ -118,10 +118,6 @@ export default function LoginPage() {
                   {profile?.display_name || 'No name'}
                 </p>
 
-                <p className="text-xs text-gray-500">
-                  {user.identity}
-                </p>
-
               </button>
             )
 
