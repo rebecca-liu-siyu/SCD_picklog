@@ -37,12 +37,12 @@ export default function UsersPage() {
 
     if (!data) return
 
-    // shuffle users
-    const shuffled = [...data].sort(
-      () => Math.random() - 0.5
+    // ✅ 按 display_name 字母排序（A → Z）
+    const sorted = [...data].sort((a, b) =>
+      (a.display_name || '').localeCompare(b.display_name || '')
     )
 
-    setProfiles(shuffled)
+    setProfiles(sorted)
   }
 
   return (

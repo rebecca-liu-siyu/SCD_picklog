@@ -8,17 +8,13 @@ export default function PostPage() {
 
   const router = useRouter()
 
-  const [identity, setIdentity] = useState<any>(null)
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
 
   const [content, setContent] = useState('')
-  const [imageFile, setImageFile] =
-    useState<File | null>(null)
-
-  const [previewUrl, setPreviewUrl] =
-    useState('')
-
-  const [loading, setLoading] =
-    useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     loadIdentity()
@@ -27,69 +23,56 @@ export default function PostPage() {
   // ================= LOAD IDENTITY =================
   async function loadIdentity() {
 
-    const localUserId = localStorage.getItem(
-      'local_user_id'
-    )
+    const localUserId = localStorage.getItem('user_id')
 
     if (!localUserId) return
 
-    const { data: user } = await supabase
+    // 1. get user
+    const { data: userData } = await supabase
       .from('users')
       .select('*')
-      .eq('local_user_id', localUserId)
+      .eq('id', localUserId)
       .single()
 
-    if (!user) return
+    if (!userData) return
 
-    const today = new Date()
-      .toISOString()
-      .split('T')[0]
+    setUser(userData)
 
-    const { data } = await supabase
-      .from('daily_identity')
-      .select(`
-        *,
-        profiles (
-          id,
-          display_name,
-          avatar_url,
-          profile_type
-        )
-      `)
-      .eq('user_id', user.id)
-      .eq('assigned_date', today)
+    // 2. get profile by identity (REAL / PSEUDO / ANON)
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', userData.id)
+      .eq('profile_type', userData.identity)
       .single()
 
-    if (!data) return
+    if (!profileData) {
+      console.log('Profile not found for identity:', userData.identity)
+      return
+    }
 
-    setIdentity({
-      user_id: user.id,
-      profile_id: data.profile_id,
-      profile: data.profiles
-    })
+    setProfile(profileData)
   }
 
-  // ================= IMAGE CHANGE =================
+  // ================= IMAGE =================
   function handleImageChange(
     e: React.ChangeEvent<HTMLInputElement>
   ) {
 
     const file = e.target.files?.[0]
-
     if (!file) return
 
     setImageFile(file)
-
-    const localUrl =
-      URL.createObjectURL(file)
-
-    setPreviewUrl(localUrl)
+    setPreviewUrl(URL.createObjectURL(file))
   }
 
   // ================= CREATE POST =================
   async function createPost() {
 
-    if (!identity) return
+    if (!user || !profile) {
+      alert('Missing user or profile')
+      return
+    }
 
     if (!content.trim()) {
       alert('Please write something')
@@ -105,16 +88,14 @@ export default function PostPage() {
 
       setLoading(true)
 
-      // ===== upload image =====
-      const fileExt =
-        imageFile.name.split('.').pop()
+      // ================= STORAGE PATH =================
+      const ext = imageFile.name.split('.').pop()
+      const fileName = `${Date.now()}.${ext}`
 
-      const fileName =
-        `${Date.now()}.${fileExt}`
+      // ✔ 符合你的架構：post-images bucket
+      const filePath = `${profile.profile_type}/${fileName}`
 
-      const filePath =
-        `posts/${identity.user_id}/${fileName}`
-
+      // ================= UPLOAD =================
       const { error: uploadError } =
         await supabase.storage
           .from('post-images')
@@ -122,65 +103,51 @@ export default function PostPage() {
 
       if (uploadError) {
         console.log(uploadError)
-        alert('Upload failed')
+        alert(uploadError.message)
         return
       }
 
-      // ===== get public url =====
+      // ================= PUBLIC URL =================
       const { data: publicUrlData } =
         supabase.storage
           .from('post-images')
           .getPublicUrl(filePath)
 
-      const imageUrl =
-        publicUrlData.publicUrl
+      const imageUrl = publicUrlData.publicUrl
 
-      // ===== insert post =====
+      // ================= INSERT POST =================
       const { error: insertError } =
-        await supabase
-          .from('posts')
-          .insert({
-            user_id: identity.user_id,
-            profile_id: identity.profile_id,
-            image_url: imageUrl,
-            content
-          })
+        await supabase.from('posts').insert({
+          user_id: user.id,
+          profile_id: profile.id,
+          image_url: imageUrl,
+          content
+        })
 
       if (insertError) {
         console.log(insertError)
-        alert('Create post failed')
+        alert(insertError.message)
         return
       }
 
       router.push('/feed')
 
-    } catch (err) {
-
-      console.log(err)
-      alert('Something went wrong')
-
     } finally {
-
       setLoading(false)
-
     }
   }
 
   return (
-    <div className="h-screen bg-white flex justify-center overflow-hidden">
+    <div className="h-screen flex justify-center bg-white">
 
-      {/* APP */}
-      <div className="w-full max-w-md h-screen flex flex-col bg-white">
+      <div className="w-full max-w-md h-screen flex flex-col overflow-hidden">
 
-        {/* ================= HEAD ================= */}
+        {/* ================= HEADER ================= */}
         <div className="shrink-0 border-b px-4 py-3 bg-white">
 
           <div className="flex items-center justify-between">
 
-            <button
-              onClick={() => router.push('/feed')}
-              className="text-sm"
-            >
+            <button onClick={() => router.push('/feed')}>
               Cancel
             </button>
 
@@ -191,192 +158,92 @@ export default function PostPage() {
             <button
               onClick={createPost}
               disabled={loading}
-              className="
-                text-sm
-                font-semibold
-                text-blue-500
-                disabled:opacity-50
-              "
+              className="text-blue-500 font-semibold"
             >
-              {loading
-                ? 'Posting...'
-                : 'Post'}
+              {loading ? 'Posting...' : 'Post'}
             </button>
 
           </div>
 
-        </div>
-
-        {/* ================= BODY ================= */}
-        <div
-          className="
-            flex-1
-            overflow-y-auto
-            p-4
-            space-y-5
-          "
-        >
-
           {/* identity */}
-          {identity?.profile && (
+          {profile && (
+            <div className="flex items-center gap-3 mt-3">
 
-            <div className="flex items-center gap-3">
-
-              {identity.profile.avatar_url ? (
-
+              {profile.avatar_url ? (
                 <img
-                  src={
-                    identity.profile.avatar_url
-                  }
-                  className="
-                    w-12
-                    h-12
-                    rounded-full
-                    object-cover
-                  "
+                  src={profile.avatar_url}
+                  className="w-10 h-10 rounded-full object-cover"
                 />
-
               ) : (
-
-                <div className="w-12 h-12 rounded-full bg-gray-300" />
-
+                <div className="w-10 h-10 rounded-full bg-gray-300" />
               )}
 
               <div>
-
-                <p className="font-semibold">
-                  {identity.profile.display_name}
+                <p className="font-semibold text-sm">
+                  {profile.display_name}
                 </p>
 
                 <p className="text-xs text-gray-500">
-                  {
-                    identity.profile
-                      .profile_type
-                  }
+                  {user?.identity}
                 </p>
-
               </div>
 
             </div>
-
           )}
 
+        </div>
+
+        {/* ================= BODY ================= */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+
           {/* upload */}
-          <div>
+          <label className="w-full aspect-square border-2 border-dashed rounded-3xl flex items-center justify-center bg-gray-50 overflow-hidden">
 
-            <label
-              className="
-                w-full
-                aspect-square
-                border-2
-                border-dashed
-                rounded-3xl
-                flex
-                items-center
-                justify-center
-                overflow-hidden
-                cursor-pointer
-                bg-gray-50
-              "
-            >
-
-              {previewUrl ? (
-
-                <img
-                  src={previewUrl}
-                  className="
-                    w-full
-                    h-full
-                    object-cover
-                  "
-                />
-
-              ) : (
-
-                <div className="text-center">
-
-                  <p className="text-4xl mb-2">
-                    ＋
-                  </p>
-
-                  <p className="text-sm text-gray-500">
-                    Upload Photo
-                  </p>
-
-                </div>
-
-              )}
-
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                className="hidden"
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                className="w-full h-full object-cover"
               />
+            ) : (
+              <div className="text-center">
+                <p className="text-4xl">＋</p>
+                <p className="text-sm text-gray-500">
+                  Upload Photo
+                </p>
+              </div>
+            )}
 
-            </label>
-
-          </div>
-
-          {/* content */}
-          <div>
-
-            <textarea
-              value={content}
-              onChange={e =>
-                setContent(e.target.value)
-              }
-              placeholder="Write a caption..."
-              className="
-                w-full
-                min-h-[160px]
-                border
-                rounded-2xl
-                p-4
-                resize-none
-                outline-none
-                text-sm
-                leading-6
-              "
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="hidden"
             />
 
-          </div>
+          </label>
+
+          {/* content */}
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Write a caption..."
+            className="w-full min-h-[160px] border rounded-2xl p-4 text-sm outline-none resize-none"
+          />
 
         </div>
 
         {/* ================= FOOT ================= */}
-        <div
-          className="
-            shrink-0
-            border-t
-            bg-white
-            flex
-            justify-around
-            items-center
-            py-3
-          "
-        >
+        <div className="shrink-0 border-t flex justify-around p-3 bg-white">
 
-          <button
-            onClick={() => router.push('/feed')}
-            className="text-sm"
-          >
+          <button onClick={() => router.push('/feed')}>
             Home
           </button>
 
-          <button
-            className="
-              text-2xl
-              font-semibold
-            "
-          >
+          <button className="text-2xl font-bold">
             ＋
           </button>
 
-          <button
-            onClick={() => router.push('/users')}
-            className="text-sm"
-          >
+          <button onClick={() => router.push('/users')}>
             Users
           </button>
 

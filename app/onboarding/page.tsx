@@ -8,6 +8,9 @@ export default function OnboardingPage() {
 
   const router = useRouter()
 
+  // ================= ACCOUNT =================
+  const [password, setPassword] = useState('')
+
   // ================= REAL =================
   const [realId, setRealId] = useState('')
   const [realBio, setRealBio] = useState('')
@@ -22,31 +25,39 @@ export default function OnboardingPage() {
 
   const [loading, setLoading] = useState(false)
 
-  // ================= UPLOAD AVATAR =================
-  async function uploadAvatar(file: File, type: 'REAL' | 'PSEUDO') {
+  const routerPush = useRouter()
+
+  // ================= UPLOAD =================
+  async function uploadAvatar(
+    file: File,
+    type: 'REAL' | 'PSEUDO'
+  ) {
+
     const ext = file.name.split('.').pop()
 
-    const fileName = `${Date.now()}-${Math.random()}.${ext}`
+    const fileName =
+      `${Date.now()}-${Math.random()}.${ext}`
 
-    const filePath = `${type}/${fileName}`
+    const filePath =
+      `${type}/${fileName}`
 
     const { error } = await supabase
-        .storage
-        .from('avatars')
-        .upload(filePath, file)
+      .storage
+      .from('avatars')
+      .upload(filePath, file)
 
     if (error) {
-        console.log(error)
-        return ''
+      console.log(error)
+      return ''
     }
 
     const { data } = supabase
-        .storage
-        .from('avatars')
-        .getPublicUrl(filePath)
+      .storage
+      .from('avatars')
+      .getPublicUrl(filePath)
 
     return data.publicUrl
-    }
+  }
 
   // ================= SUBMIT =================
   async function handleSubmit() {
@@ -55,113 +66,103 @@ export default function OnboardingPage() {
 
       setLoading(true)
 
-      // ================= CREATE USER =================
-      const localUserId = crypto.randomUUID()
+      // ================= USER COUNT =================
+      const { count } = await supabase
+        .from('users')
+        .select('*', {
+          count: 'exact',
+          head: true
+        })
 
+      const userCount = count || 0
+
+      // ================= ASSIGN IDENTITY =================
+      const identities = [
+        'REAL',
+        'PSEUDO',
+        'ANON'
+      ]
+
+      const assignedIdentity =
+        identities[userCount % 3]
+
+      // ================= CREATE USER =================
       const { data: userData, error: userError } =
         await supabase
           .from('users')
           .insert({
-            local_user_id: localUserId
+            pwd: password,
+            identity: assignedIdentity
           })
           .select()
           .single()
 
       if (userError || !userData) {
+
         console.log(userError)
+
         alert('Create user failed')
         return
       }
 
-      // save local identity
+      // save login
       localStorage.setItem(
-        'local_user_id',
-        localUserId
+        'user_id',
+        userData.id
       )
 
-      // ================= UPLOAD REAL AVATAR =================
+      // ================= AVATAR =================
       let realAvatarUrl = ''
+      let pseudoAvatarUrl = ''
 
       if (realAvatar) {
         realAvatarUrl =
-          await uploadAvatar(realAvatar, "REAL")
+          await uploadAvatar(
+            realAvatar,
+            'REAL'
+          )
       }
-
-      // ================= UPLOAD PSEUDO AVATAR =================
-      let pseudoAvatarUrl = ''
 
       if (pseudoAvatar) {
         pseudoAvatarUrl =
-          await uploadAvatar(pseudoAvatar, "PSEUDO")
+          await uploadAvatar(
+            pseudoAvatar,
+            'PSEUDO'
+          )
       }
 
-      // ================= CREATE REAL PROFILE =================
-      const { data: realProfile } =
-        await supabase
-          .from('profiles')
-          .insert({
-            user_id: userData.id,
-            display_name: realId,
-            bio: realBio,
-            avatar_url: realAvatarUrl,
-            profile_type: 'REAL'
-          })
-          .select()
-          .single()
-
-      // ================= CREATE PSEUDO PROFILE =================
-      const { data: pseudoProfile } =
-        await supabase
-          .from('profiles')
-          .insert({
-            user_id: userData.id,
-            display_name: pseudoId,
-            bio: pseudoBio,
-            avatar_url: pseudoAvatarUrl,
-            profile_type: 'PSEUDO'
-          })
-          .select()
-          .single()
-
-      // ================= CREATE ANON PROFILE =================
-      const { data: anonProfile } =
-        await supabase
-          .from('profiles')
-          .insert({
-            user_id: userData.id,
-            display_name: 'Anonymous',
-            profile_type: 'ANON'
-          })
-          .select()
-          .single()
-
-      // ================= ASSIGN DAILY IDENTITY =================
-      const profiles = [
-        realProfile,
-        pseudoProfile,
-        anonProfile
-      ].filter(Boolean)
-
-      const randomProfile =
-        profiles[
-          Math.floor(
-            Math.random() * profiles.length
-          )
-        ]
-
-      const today = new Date()
-        .toISOString()
-        .split('T')[0]
-
+      // ================= REAL PROFILE =================
       await supabase
-        .from('daily_identity')
+        .from('profiles')
         .insert({
           user_id: userData.id,
-          profile_id: randomProfile.id,
-          assigned_date: today
+          display_name: realId,
+          bio: realBio,
+          avatar_url: realAvatarUrl,
+          profile_type: 'REAL'
         })
 
-      router.push('/feed')
+      // ================= PSEUDO PROFILE =================
+      await supabase
+        .from('profiles')
+        .insert({
+          user_id: userData.id,
+          display_name: pseudoId,
+          bio: pseudoBio,
+          avatar_url: pseudoAvatarUrl,
+          profile_type: 'PSEUDO'
+        })
+
+      // ================= ANON PROFILE =================
+      await supabase
+        .from('profiles')
+        .insert({
+          user_id: userData.id,
+          display_name: 'Anonymous',
+          profile_type: 'ANON'
+        })
+
+      routerPush.push('/feed')
 
     } finally {
 
@@ -173,7 +174,6 @@ export default function OnboardingPage() {
   return (
     <div className="h-screen bg-white flex justify-center overflow-hidden">
 
-      {/* APP */}
       <div className="w-full max-w-md h-screen flex flex-col bg-white">
 
         {/* ================= HEAD ================= */}
@@ -200,60 +200,67 @@ export default function OnboardingPage() {
           "
         >
 
+          {/* PASSWORD */}
+          <div className="space-y-2">
+
+            <p className="font-semibold">
+              Password
+            </p>
+
+            <input
+              type="password"
+              value={password}
+              onChange={(e) =>
+                setPassword(e.target.value)
+              }
+              placeholder="Password"
+              className="
+                w-full
+                border-b
+                py-3
+                outline-none
+              "
+            />
+
+          </div>
+
           {/* ================= REAL ================= */}
           <div className="space-y-4">
 
-            <div>
+            <p className="font-semibold">
+              REAL
+            </p>
 
-              <p className="font-semibold">
-                REAL
-              </p>
+            <label className="
+              block
+              border
+              rounded-2xl
+              p-4
+              text-center
+              text-sm
+            ">
 
-              <p className="text-sm text-gray-500">
-                Your main identity
-              </p>
+              Upload Avatar
 
-            </div>
+              <input
+                hidden
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
 
-            {/* avatar */}
-            <div>
+                  const file =
+                    e.target.files?.[0]
 
-              <label
-                className="
-                  block
-                  border
-                  rounded-2xl
-                  p-4
-                  text-center
-                  text-sm
-                "
-              >
+                  if (file) {
+                    setRealAvatar(file)
+                  }
 
-                Upload Avatar
+                }}
+              />
 
-                <input
-                  hidden
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
+            </label>
 
-                    const file =
-                      e.target.files?.[0]
-
-                    if (file) {
-                      setRealAvatar(file)
-                    }
-
-                  }}
-                />
-
-              </label>
-
-            </div>
-
-            {/* preview */}
             {realAvatar && (
-
               <img
                 src={URL.createObjectURL(realAvatar)}
                 className="
@@ -263,10 +270,8 @@ export default function OnboardingPage() {
                   object-cover
                 "
               />
-
             )}
 
-            {/* id */}
             <input
               value={realId}
               onChange={(e) =>
@@ -281,7 +286,6 @@ export default function OnboardingPage() {
               "
             />
 
-            {/* bio */}
             <textarea
               value={realBio}
               onChange={(e) =>
@@ -303,57 +307,40 @@ export default function OnboardingPage() {
           {/* ================= PSEUDO ================= */}
           <div className="space-y-4">
 
-            <div>
+            <p className="font-semibold">
+              PSEUDO
+            </p>
 
-              <p className="font-semibold">
-                PSEUDO
-              </p>
+            <label className="
+              block
+              border
+              rounded-2xl
+              p-4
+              text-center
+              text-sm
+            ">
 
-              <p className="text-sm text-gray-500">
-                Your alternate identity
-              </p>
+              Upload Avatar
 
-            </div>
+              <input
+                hidden
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
 
-            {/* avatar */}
-            <div>
+                  const file =
+                    e.target.files?.[0]
 
-              <label
-                className="
-                  block
-                  border
-                  rounded-2xl
-                  p-4
-                  text-center
-                  text-sm
-                "
-              >
+                  if (file) {
+                    setPseudoAvatar(file)
+                  }
 
-                Upload Avatar
+                }}
+              />
 
-                <input
-                  hidden
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
+            </label>
 
-                    const file =
-                      e.target.files?.[0]
-
-                    if (file) {
-                      setPseudoAvatar(file)
-                    }
-
-                  }}
-                />
-
-              </label>
-
-            </div>
-
-            {/* preview */}
             {pseudoAvatar && (
-
               <img
                 src={URL.createObjectURL(
                   pseudoAvatar
@@ -365,10 +352,8 @@ export default function OnboardingPage() {
                   object-cover
                 "
               />
-
             )}
 
-            {/* id */}
             <input
               value={pseudoId}
               onChange={(e) =>
@@ -383,7 +368,6 @@ export default function OnboardingPage() {
               "
             />
 
-            {/* bio */}
             <textarea
               value={pseudoBio}
               onChange={(e) =>
@@ -405,14 +389,12 @@ export default function OnboardingPage() {
         </div>
 
         {/* ================= FOOT ================= */}
-        <div
-          className="
-            shrink-0
-            border-t
-            bg-white
-            p-3
-          "
-        >
+        <div className="
+          shrink-0
+          border-t
+          bg-white
+          p-3
+        ">
 
           <button
             onClick={handleSubmit}

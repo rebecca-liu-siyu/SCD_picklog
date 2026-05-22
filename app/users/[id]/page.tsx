@@ -87,32 +87,6 @@ export default function UserProfilePage() {
         {/* ================= HEAD ================= */}
         <div className="shrink-0 border-b bg-white">
 
-          {/* top bar */}
-          <div
-            className="
-              px-4
-              py-3
-              flex
-              items-center
-              justify-between
-            "
-          >
-
-            <button
-              onClick={() => router.back()}
-              className="text-sm"
-            >
-              Back
-            </button>
-
-            <p className="font-semibold">
-              Profile
-            </p>
-
-            <div className="w-10" />
-
-          </div>
-
           {/* profile */}
           {profile && (
 

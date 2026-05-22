@@ -8,57 +8,48 @@ export default function FeedPage() {
 
   const router = useRouter()
 
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+
   const [posts, setPosts] = useState<any[]>([])
   const [index, setIndex] = useState(0)
-  const [identity, setIdentity] = useState<any>(null)
 
   useEffect(() => {
-    loadIdentity()
+    loadUser()
     loadPosts()
   }, [])
 
-  // ================= LOAD IDENTITY =================
-  async function loadIdentity() {
+  // ================= USER + IDENTITY =================
+  async function loadUser() {
 
-    const localUserId = localStorage.getItem(
-      'local_user_id'
-    )
+    const userId = localStorage.getItem('user_id')
 
-    if (!localUserId) return
+    if (!userId) return
 
-    const { data: user } = await supabase
+    const { data: userData } = await supabase
       .from('users')
       .select('*')
-      .eq('local_user_id', localUserId)
+      .eq('id', userId)
       .single()
 
-    if (!user) return
+    if (!userData) return
 
-    const today = new Date()
-      .toISOString()
-      .split('T')[0]
+    setUser(userData)
 
-    const { data } = await supabase
-      .from('daily_identity')
-      .select(`
-        *,
-        profiles (
-          display_name,
-          avatar_url,
-          profile_type
-        )
-      `)
-      .eq('user_id', user.id)
-      .eq('assigned_date', today)
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', userData.id)
+      .eq('profile_type', userData.identity)
       .single()
 
-    setIdentity(data)
+    setProfile(profileData)
   }
 
-  // ================= LOAD POSTS =================
+  // ================= POSTS =================
   async function loadPosts() {
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('posts')
       .select(`
         *,
@@ -68,219 +59,113 @@ export default function FeedPage() {
           profile_type
         )
       `)
-      .order('created_at', {
-        ascending: false
-      })
+      .order('created_at', { ascending: false })
 
-    if (error) {
-      console.log(error)
-      return
+    if (data) {
+      const shuffled = [...data].sort(() => Math.random() - 0.5)
+      setPosts(shuffled)
+      setIndex(0)
     }
-
-    if (!data) return
-
-    const shuffled = [...data].sort(
-      () => Math.random() - 0.5
-    )
-
-    setPosts(shuffled)
-    setIndex(0)
   }
 
-  // ================= NEXT POST =================
   function nextPost() {
-
-    if (posts.length === 0) return
-
-    setIndex(prev =>
-      (prev + 1) % posts.length
-    )
+    setIndex((prev) => (prev + 1) % posts.length)
   }
 
   const post = posts[index]
 
   return (
-    <div className="h-screen bg-white flex justify-center overflow-hidden">
+    <div className="h-screen flex justify-center bg-white">
 
-      {/* APP */}
-      <div className="w-full max-w-md h-screen flex flex-col bg-white">
+      <div className="w-full max-w-md flex flex-col h-screen">
 
-        {/* ================= HEAD ================= */}
-        <div className="shrink-0 border-b px-4 py-3 bg-white">
+        {/* ================= HEADER ================= */}
+        <div className="border-b p-3 flex items-center gap-3">
 
-          {identity?.profiles && (
-
-            <div className="flex items-center gap-3">
-
-              {/* avatar */}
-              {identity.profiles.avatar_url ? (
-                <img
-                  src={identity.profiles.avatar_url}
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-gray-300" />
-              )}
-
-              {/* info */}
-              <div>
-
-                <p className="text-xs text-gray-500">
-                  TODAY IDENTITY
-                </p>
-
-                <p className="font-semibold leading-tight">
-                  {identity.profiles.display_name}
-                </p>
-
-                <p className="text-xs text-gray-500">
-                  {identity.profiles.profile_type}
-                </p>
-
-              </div>
-
-            </div>
-
+          {profile?.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              className="w-10 h-10 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-gray-300" />
           )}
+
+          <div>
+            <p className="font-bold">
+              {profile?.display_name || 'Loading...'}
+            </p>
+
+            <p className="text-xs text-gray-500">
+              {user?.identity}
+            </p>
+          </div>
 
         </div>
 
         {/* ================= BODY ================= */}
-        <div
-          className="
-            flex-1
-            overflow-y-auto
-            relative
-            scrollbar-hide
-          "
-        >
+        <div className="flex-1 relative p-4 overflow-y-auto">
 
           {post ? (
-
-            <div className="p-4 pb-24">
-
-              {/* post user */}
-              <div className="flex items-center gap-3 mb-3">
+            <>
+              <div className="flex items-center gap-2 mb-2">
 
                 {post.profiles?.avatar_url ? (
                   <img
                     src={post.profiles.avatar_url}
-                    className="
-                      w-10
-                      h-10
-                      rounded-full
-                      object-cover
-                    "
+                    className="w-8 h-8 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-gray-300" />
+                  <div className="w-8 h-8 rounded-full bg-gray-300" />
                 )}
 
-                <div>
+                <p className="font-semibold text-sm">
+                  {post.profiles?.display_name}
+                </p>
 
-                  <p className="font-semibold text-sm">
-                    {post.profiles?.display_name}
-                  </p>
-
-                  <p className="text-xs text-gray-500">
-                    {post.profiles?.profile_type}
-                  </p>
-
-                </div>
+                <span className="text-xs text-gray-400">
+                  {post.profiles?.profile_type}
+                </span>
 
               </div>
 
-              {/* image */}
               {post.image_url && (
-
                 <img
                   src={post.image_url}
-                  className="
-                    w-full
-                    rounded-2xl
-                    object-cover
-                    mb-4
-                  "
+                  className="w-full rounded-xl"
                 />
-
               )}
 
-              {/* content */}
-              <p
-                className="
-                  whitespace-pre-wrap
-                  break-words
-                  text-sm
-                  leading-6
-                "
-              >
+              <p className="mt-3 whitespace-pre-wrap">
                 {post.content}
               </p>
-
-            </div>
-
+            </>
           ) : (
-
-            <div className="h-full flex items-center justify-center">
-              <p className="text-gray-400">
-                No posts
-              </p>
-            </div>
-
+            <p>No posts</p>
           )}
 
-          {/* NEXT TAP AREA */}
           <div
             onClick={nextPost}
-            className="
-              absolute
-              right-0
-              top-0
-              w-1/3
-              h-full
-            "
+            className="absolute right-0 top-0 w-1/3 h-full"
           />
-
         </div>
 
         {/* ================= FOOT ================= */}
-        <div
-          className="
-            shrink-0
-            border-t
-            bg-white
-            flex
-            justify-around
-            items-center
-            py-3
-          "
-        >
-
-          <button
-            onClick={() => router.push('/feed')}
-            className="text-sm font-semibold"
-          >
+        <div className="border-t flex justify-around p-3">
+          <button onClick={() => router.push('/feed')}>
             Home
           </button>
 
-          <button
-            onClick={() => router.push('/post')}
-            className="text-2xl"
-          >
+          <button onClick={() => router.push('/post')}>
             ＋
           </button>
 
-          <button
-            onClick={() => router.push('/users')}
-            className="text-sm"
-          >
+          <button onClick={() => router.push('/users')}>
             Users
           </button>
-
         </div>
 
       </div>
-
     </div>
   )
 }
