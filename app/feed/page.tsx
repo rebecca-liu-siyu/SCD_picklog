@@ -62,8 +62,7 @@ export default function FeedPage() {
       .order('created_at', { ascending: false })
 
     if (data) {
-      const shuffled = [...data].sort(() => Math.random() - 0.5)
-      setPosts(shuffled)
+      setPosts(data)
       setIndex(0)
     }
   }
