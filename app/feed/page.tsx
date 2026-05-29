@@ -278,7 +278,7 @@ export default function FeedPage() {
 
                 <button
                   onClick={toggleLike}
-                  className="text-2xl"
+                  className="text-2xl z-50"
                 >
                   {liked ? '❤️' : '🤍'}
                 </button>
