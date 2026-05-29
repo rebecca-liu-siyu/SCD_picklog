@@ -278,7 +278,7 @@ export default function FeedPage() {
 
                 <button
                   onClick={toggleLike}
-                  className="text-2xl z-50"
+                  className="text-2xl z-5"
                 >
                   {liked ? '❤️' : '🤍'}
                 </button>
@@ -295,7 +295,7 @@ export default function FeedPage() {
               </p>
 
               {/* ================= COMMENTS ================= */}
-              <div className="mt-8 space-y-4">
+              <div className="mt-8 space-y-4 z-10">
 
                 <p className="font-semibold text-sm">
                   Comments
