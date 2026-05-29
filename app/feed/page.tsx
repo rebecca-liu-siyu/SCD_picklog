@@ -295,7 +295,7 @@ export default function FeedPage() {
               </p>
 
               {/* ================= COMMENTS ================= */}
-              <div className="mt-8 space-y-4 z-10">
+              <div className="mt-8 space-y-4 z-8">
 
                 <p className="font-semibold text-sm">
                   Comments
