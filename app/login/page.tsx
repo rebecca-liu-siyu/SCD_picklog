@@ -99,7 +99,10 @@ export default function LoginPage() {
 
           {users.map((user) => {
 
-            const profile = user.profiles?.[0]
+            const profile_0 = user.profiles?.[0]
+            const profile_1 = user.profiles?.[1]
+            const profile_2 = user.profiles?.[2]
+            const profile = profile_0.profile_type == "REAL" ? profile_0 : (profile_1.profile_type == "REAL"? profile_1 : profile_2)
 
             return (
               <button
